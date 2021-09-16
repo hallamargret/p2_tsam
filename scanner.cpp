@@ -19,6 +19,22 @@ void reciveFromServer(int sock_fd){
                 cout << buffer;
             }
 
+// creating a socket, returns the socked if successfully opened socket, if not returns -1 
+int open_socket(){
+    struct sockaddr_in server_addr;
+    struct hostent *server;
+
+    int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
+
+    if(udp_sock < 0)
+      {
+         perror("Failed to open socket");
+         return(-1);
+      }
+    return udp_sock;
+
+}
+
 
 int main(int argc, char *argv[]){
 
@@ -29,21 +45,21 @@ int main(int argc, char *argv[]){
     char buffer[1400];
     int length;
     struct sockaddr_in destaddr;
-    struct timeval timeout;
+    //struct timeval timeout;
 
 
-    fd_set readfds, writefds, exceptfds;
+    //fd_set masterfds;
 
-    FD_ZERO(&readfds);
-    FD_ZERO(&writefds);
-    FD_ZERO(&exceptfds);
+    // FD_ZERO(&readfds);
+    // FD_ZERO(&writefds);
+    // FD_ZERO(&exceptfds);
 
-    timeout.tv_sec = 60;                    /*set the timeout to 10 seconds*/
-    timeout.tv_usec = 0;
+    // timeout.tv_sec = 60;                    /*set the timeout to 10 seconds*/
+    // timeout.tv_usec = 0;
 
-    FD_SET(udp_sock, &readfds);
-    FD_SET(udp_sock, &writefds);
-    FD_SET(udp_sock, &exceptfds);
+    //FD_SET(udp_sock, &masterfds);
+    // FD_SET(udp_sock, &writefds);
+    // FD_SET(udp_sock, &exceptfds);
 
     char szbuff[256];
     memset(szbuff, ' ', sizeof(szbuff));
@@ -56,61 +72,56 @@ int main(int argc, char *argv[]){
         const char *port_from = argv[2];
         const char *port_to = argv[3];
 
+        udp_sock = open_socket();
 
-        if ((udp_sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0){
-            perror("Unable to open socket");
-            return(-1);
-        }
+        if (udp_sock > 0){
+            destaddr.sin_family = AF_INET;
+            inet_aton(IP, &destaddr.sin_addr);
 
-        destaddr.sin_family = AF_INET;
-        inet_aton(IP, &destaddr.sin_addr);
-
-        int counter = 0;
-        for (int port = atoi(port_from); port <= atoi(port_to); port++){
-            destaddr.sin_port = htons(port);
-            // sendto(int socket, const void *buffer, size_t length, int flags, const struct sockaddr *dest_addr, socklen_t dest_len)
             int counter = 0;
-            bool open = false;
-            for (int i = 0; i < 4; i++){
-                if (sendto(udp_sock, buffer, length, 0, (const struct sockaddr *)&destaddr, sizeof(destaddr)) < 0){
-                    perror("Failed to send");
-                }
-                else {
-                    counter += 1;
-                    int t = select(-1, &readfds, &writefds, &exceptfds, &timeout);s
-                    // if (FD_ISSET(udp_sock, &readfds)){
-                    //     int destaddr_size = sizeof(destaddr);
-                    //     recvfrom(udp_sock, buffer, length, 0, (sockaddr *)&destaddr, (socklen_t *)&destaddr_size);
-                    //     cout<< buffer<< endl;
-                    // }
-                    // else{
-                    //     cout << "Timeout!" << endl;
-                    //     int destaddr_size = sizeof(destaddr);
-                    //     cout << recvfrom(udp_sock, buffer, length, 0, (sockaddr *)&destaddr, (socklen_t *)&destaddr_size) << endl;
-                    // }
-                
+            for (int port = atoi(port_from); port <= atoi(port_to); port++){
+                fd_set masterfds;
+                FD_SET(udp_sock, &masterfds);
+                struct timeval timeout;
+                timeout.tv_sec = 0;                    /*set the timeout to 10 seconds*/
+                timeout.tv_usec = 20000;
+                destaddr.sin_family = AF_INET;
+                inet_aton(IP, &destaddr.sin_addr);
+                destaddr.sin_port = htons(port);
+                int counter = 0;
+                // sendto(int socket, const void *buffer, size_t length, int flags, const struct sockaddr *dest_addr, socklen_t dest_len)
+                bool open = false;
+                for (int i = 0; i < 4; i++){
+                    if (sendto(udp_sock, buffer, length, 0, (const struct sockaddr *)&destaddr, sizeof(destaddr)) < 0){
+                        perror("Failed to send");
+                    }
+                    else {
+                        counter += 1;
+                        int t = select(udp_sock + 1, &masterfds, NULL, NULL, &timeout);
+                        cout << t << endl;
+                        if (t > 0){
+                            int destaddr_size = sizeof(destaddr);
+                            recvfrom(udp_sock, buffer, length, 0, (sockaddr *)&destaddr, (socklen_t *)&destaddr_size);
+                            cout << "the buffer: " << buffer << endl;
+                            open = true;
+                        }
+                        else{
+                            //cout << "Timeout!" << endl;
+                            int destaddr_size = sizeof(destaddr);
+                            //cout << recvfrom(udp_sock, buffer, length, 0, (sockaddr *)&destaddr, (socklen_t *)&destaddr_size) << endl;
+                        }
                     
-                // if (recvfrom(udp_sock, buffer, length, 0, (sockaddr *)&destaddr, (socklen_t *)&destaddr_size) < 0){
-                //     perror("Failed to recieve");
-                // }
-                // else{
-                //     open = true;
-                //     counter += 1;
-                //     break;
-                // }
-                //cout << buffer << endl;
+                    }
                 }
-            }
-            if (open){
-                cout << counter<< endl;
+                if (open){
+                    cout << port << endl;
+                }
+                //cout << counter << endl;
+
 
             }
-            cout << counter << endl;
-            
-            
-        
         }
+    
     }
-
     return 0;
 }
