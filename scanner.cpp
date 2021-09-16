@@ -77,8 +77,7 @@ int main(int argc, char *argv[]){
                 }
                 else {
                     counter += 1;
-                    int t = select(-1, &readfds, &writefds, &exceptfds, &timeout);
-                    if (t = SOCKET_ERROR)
+                    int t = select(-1, &readfds, &writefds, &exceptfds, &timeout);s
                     // if (FD_ISSET(udp_sock, &readfds)){
                     //     int destaddr_size = sizeof(destaddr);
                     //     recvfrom(udp_sock, buffer, length, 0, (sockaddr *)&destaddr, (socklen_t *)&destaddr_size);
