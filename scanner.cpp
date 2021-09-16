@@ -10,8 +10,6 @@
 
 using namespace std;
 
-// ./scanner 130.208.242.120 4000 4010
-
 // creating a socket, returns the socked if successfully opened socket, if not returns -1 
 int open_socket(){
     struct sockaddr_in server_addr;
@@ -50,34 +48,39 @@ int main(int argc, char *argv[]){
             destaddr.sin_family = AF_INET;
             inet_aton(IP, &destaddr.sin_addr);
 
+            // Scans each port from port_from to port_to
             for (int port = atoi(port_from); port <= atoi(port_to); port++){
                 fd_set masterfds;
                 FD_SET(udp_sock, &masterfds);
-                struct timeval timeout;
+                struct timeval timeout;             // Timeout for recvfrom()
                 timeout.tv_sec = 0;
                 timeout.tv_usec = 20000;            // Set timeout to 0.2 seconds
+
                 destaddr.sin_family = AF_INET;
                 inet_aton(IP, &destaddr.sin_addr);
                 destaddr.sin_port = htons(port);
 
-
+                // Check each port 4 times because udp is an unreliable protocol
                 for (int i = 0; i < 4; i++){
                     if (sendto(udp_sock, buffer, length, 0, (const struct sockaddr *)&destaddr, sizeof(destaddr)) < 0){
                         perror("Failed to send");
                     }
                     else {
                         int t = select(udp_sock + 1, &masterfds, NULL, NULL, &timeout);
-                        if (t > 0){
+                        if (t > 0){ // if t is 0, timeout accured
                             int destaddr_size = sizeof(destaddr);
-                            recvfrom(udp_sock, buffer, length, 0, (sockaddr *)&destaddr, (socklen_t *)&destaddr_size);
-                            cout << port << endl; // The port is open, print the port and break to check the next port
-                            break;
+                            if(recvfrom(udp_sock, buffer, length, 0, (sockaddr *)&destaddr, (socklen_t *)&destaddr_size) < 0){
+                                perror("Failed to recieve");
+                            }
+                            else { // if ok, print port
+                                cout << port << endl; // The port is open, print the port and break to check the next port
+                                break;
+                            }
                         }
                     }
                 }
             }
         }
-    
     }
     return 0;
 }
