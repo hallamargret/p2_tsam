@@ -42,7 +42,7 @@ After compilation, we must run the program on the terminal.
  ./scanner <IP address> <low port> <high port>
 ```
 
-where the "IP address" is the address you want to scan on and all the ports between "low port" and "high port" will be scaned, e.g. ./scanner 130.208.242.120 4000 4100 listens to skel from ports 4000 to 4100.
+where the "IP address" is the address you want to scan on and all the ports between "low port" and "high port" will be scaned, e.g. ./scanner 130.208.242.120 4000 4100 listens to IP 130.208.242.120 and ports from 4000 to 4100.
 
 
 Thank you for your time and I hope you have a good day and enjoy this simple scanner program.
