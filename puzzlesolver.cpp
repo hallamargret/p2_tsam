@@ -37,10 +37,12 @@ int main(int argc, char *argv[]){
     strcpy(buffer, "Hi Port!"); // Message set to buffer
     length = strlen(buffer) + 1; // lenght of buffer
 
-    if (argc == 4){
+    if (argc == 2){
+        //call scanner to get the open ports that are not hidden
         const char *IP = argv[1];
         const char *port_from = argv[2];
         const char *port_to = argv[3];
+        int ports[10];
 
         udp_sock = open_socket();
 
@@ -60,6 +62,7 @@ int main(int argc, char *argv[]){
                 inet_aton(IP, &destaddr.sin_addr);
                 destaddr.sin_port = htons(port);
 
+                int array_counter = 0;
                 // Check each port 4 times because udp is an unreliable protocol
                 for (int i = 0; i < 4; i++){
                     if (sendto(udp_sock, buffer, length, 0, (const struct sockaddr *)&destaddr, sizeof(destaddr)) < 0){
@@ -74,6 +77,8 @@ int main(int argc, char *argv[]){
                             }
                             else { // if ok, print port
                                 cout << port << endl; // The port is open, print the port and break to check the next port
+                                ports[array_counter] = port;
+                                array_counter ++;
                                 break;
                             }
                         }
@@ -81,6 +86,13 @@ int main(int argc, char *argv[]){
                 }
             }
         }
+    
+
+
+    }
+    else if (argc == 6){
+        //got the ports in as arguments
+
     }
     return 0;
 }
