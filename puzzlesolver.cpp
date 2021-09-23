@@ -77,14 +77,12 @@ void make_udp_packet(string last_six, int checksum, string given_source_addr, in
     struct udphdr *udp_header = (struct udphdr*) (udp_packet);
     char *message_buffer = (char *) (udp_packet + 20 + 8);
     strcpy(message_buffer, data);
-    ip_header->ip_src = inet_aton(given_source_addr.c_str(), //inet_makeaddr(inet_addr(given_source_addr.c_str()), INADDR_ANY);
-    ip_header->ip_dst = //inet_makeaddr(inet_addr("130.208.242.120"), INADDR_ANY);
-    ip_header->ip_ttl = 0x5;
+    ip_header->ip_src = inet_makeaddr(inet_addr(given_source_addr.c_str()), INADDR_ANY);
+    ip_header->ip_dst = inet_makeaddr(inet_addr("130.208.242.120"), INADDR_ANY);
+    ip_header->ip_ttl = 5;
     udp_header->uh_dport = port;
     udp_header->uh_sport = source_addr.sin_port;
     udp_header->uh_sum = checksum;
-    cout << ip_header->ip_dst << endl;
-    cout << ip_header->ip_src << endl;
 
     string messages = "";
     messages = send_recv("130.208.242.120", port, udp_packet, destaddr, udp_sock);
