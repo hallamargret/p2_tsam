@@ -84,10 +84,12 @@ set<int> Scanner::the_scanner(){
                         else { // if ok, print port
                             //cout << port << endl; // The port is open, print the port and break to check the next port
                             //cout << buffer << endl;
-                            int open_port = ntohs(destaddr.sin_port);
-                            open_ports.insert(open_port);
+                            if (string(IP_addr) == "130.208.242.120"){
+                                int open_port = ntohs(destaddr.sin_port);
+                                open_ports.insert(open_port);
+                                
+                            }
                             break;
-
                         }
                     }
                 }
