@@ -33,7 +33,7 @@ int Scanner::open_socket(){
 
     if(udp_sock < 0) // -1 if error
       {
-         perror("Failed to open socket");
+         perror("Failed to open socket in scanner");
          return(-1);
       }
     return udp_sock;

@@ -19,17 +19,17 @@ int open_socket(){
 
         if(udp_sock < 0) // -1 if error
         {
-            perror("Failed to open socket");
+            perror("Failed to open socket in puzzlesolver ");
             return(-1);
         }
     return udp_sock;
 }
 
-string send_recv(const char* IP, int port, char* buffer, struct sockaddr_in destaddr){
+string send_recv(const char* IP, int port, char* buffer, struct sockaddr_in destaddr, int udp_sock){
     char message_buffer[1400];
     memset(&message_buffer, 0, sizeof(message_buffer));
     string return_messages;
-    int udp_sock = open_socket();
+    //int udp_sock = open_socket();
     if(udp_sock > 0){
         fd_set masterfds;
         FD_SET(udp_sock, &masterfds);
@@ -62,6 +62,15 @@ string send_recv(const char* IP, int port, char* buffer, struct sockaddr_in dest
     return return_messages;
 }
 
+void make_udp_packet(string last_six, int checksum, string given_source_addr)
+{
+    char buffer[1024];
+    struct ip *iphdr;
+    
+
+}
+
+
 
 
 int main(int argc, char *argv[]){
@@ -72,6 +81,7 @@ int main(int argc, char *argv[]){
     struct sockaddr_in destaddr;
     string messages;
     const char *IP;
+    int udp_sock;
 
 
     set<int> open_ports;
@@ -83,7 +93,7 @@ int main(int argc, char *argv[]){
         IP = argv[1];
         //call scanner to get the open ports that are not hidden
         Scanner port_scanner = Scanner(IP, 4000, 4100);
-        int udp_sock = port_scanner.open_socket();
+        udp_sock = port_scanner.open_socket();
         destaddr.sin_family = AF_INET;
         inet_aton(IP, &destaddr.sin_addr);
         int destaddr_size = sizeof(destaddr);
@@ -94,8 +104,7 @@ int main(int argc, char *argv[]){
     }
     else if (argc == 6){
         //got the ports in as arguments
-        // send the oracle a comma-seperated list of the hidden ports, and it will show us the way 4042
-        // Send a message containing $group_#$ where # is our group number 4096
+        udp_sock = open_socket();
         IP = argv[1];
         for (int i = 2; i < 6; i++){
             open_ports.insert(atoi(argv[i]));
@@ -104,11 +113,55 @@ int main(int argc, char *argv[]){
 
     }
     for (int port : open_ports){
-            messages = send_recv(IP, port, buffer, destaddr);
+            messages = "";
+            messages = send_recv(IP, port, buffer, destaddr, udp_sock);
             while (messages == ""){
-                messages = send_recv(IP, port, buffer, destaddr);
+                messages = send_recv(IP, port, buffer, destaddr, udp_sock);
             }
-            cout << port << " : " << messages << endl;
+            cout << port << ": " << messages << endl;
+            string groupstr_begin = "Hello, group_37!";
+            bool same = true;
+            for (int i = 0; i <16; i++){
+                
+                if (messages[i] != groupstr_begin[i]){
+                    same = false;
+                }
+            }
+            if (same){
+                string given_source_addr = "";
+                string before_source_addr = "source address being ";
+                int position = messages.find(before_source_addr) + before_source_addr.size();
+                while (messages[position] != '!'){
+                    given_source_addr += messages[position];
+                    position ++;
+                }
+                cout << "source addr: "<< given_source_addr<< endl;
+
+                string checksum;
+                string before_checksum = " UDP checksum of ";
+                int position_check = messages.find(before_checksum) + before_checksum.size();
+                while (messages[position_check] != ','){
+                    checksum += messages[position_check];
+                    position_check ++;
+                }
+                string last_six;
+                cout << "checksum: "<< checksum<< endl;
+                string before_bytes = " network order)";
+                int position_bytes = messages.find(before_bytes) + before_bytes.size();
+                while (position_bytes < messages.size()){
+                    last_six += messages[position_bytes];
+                    position_bytes ++;
+                }
+
+                //string last_six = messages.substr(messages.size()-6);
+
+                cout << "last 6 bytes: " <<last_six << endl;
+                cout << "stoi checksum: "<< stoi(checksum, 0, 16) <<endl;
+                cout <<"not stoi checksum, regular: "<< checksum <<endl;
+
+                make_udp_packet(last_six, stoi(checksum, 0, 16), given_source_addr);
+            }
+            
         }
     return 0;
 }
