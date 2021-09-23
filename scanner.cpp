@@ -8,7 +8,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <sys/types.h>
-#include <vector>
+#include <set>
 
 
 using namespace std;
@@ -41,7 +41,7 @@ int Scanner::open_socket(){
 
 
 
-vector<int> Scanner::the_scanner(){
+set<int> Scanner::the_scanner(){
 
     //pass the ports 4000-4100 on the command line       // The socket
     // char buffer[1400];  // Buffer for information to send
@@ -84,9 +84,10 @@ vector<int> Scanner::the_scanner(){
                         else { // if ok, print port
                             //cout << port << endl; // The port is open, print the port and break to check the next port
                             //cout << buffer << endl;
-                            open_ports.push_back(port);
-
+                            int open_port = ntohs(destaddr.sin_port);
+                            open_ports.insert(open_port);
                             break;
+
                         }
                     }
                 }

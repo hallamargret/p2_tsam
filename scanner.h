@@ -10,7 +10,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <sys/types.h>
-#include <vector>
+#include <set>
 
 using namespace std;
 
@@ -31,11 +31,11 @@ public:
     Scanner(const char *IP_addr, int port_from, int port_to);
     ~Scanner();
     int open_socket();
-    vector<int> the_scanner();
+    set<int> the_scanner();
 
 private:
     int udp_socket;
-    vector<int> open_ports;
+    set<int> open_ports;
 
     
     
