@@ -38,7 +38,7 @@ string send_recv(const char* IP, int port, char* buffer, struct sockaddr_in dest
         FD_SET(udp_sock, &masterfds);
         struct timeval timeout;             // Timeout for recvfrom()
         timeout.tv_sec = 0;
-        timeout.tv_usec = 20000;            // Set timeout to 0.2 seconds
+        timeout.tv_usec = 40000;            // Set timeout to 0.2 seconds
         
 
         destaddr.sin_family = AF_INET;
@@ -65,24 +65,28 @@ string send_recv(const char* IP, int port, char* buffer, struct sockaddr_in dest
     return return_messages;
 }
 
-void make_udp_packet(string last_six, int checksum, string given_source_addr, int port, int udp_sock, struct sockaddr_in destaddr)
+void make_udp_packet(int checksum, string given_source_addr, int port, int udp_sock, struct sockaddr_in destaddr)
 {
-    struct sockaddr_in source_addr;
-    source_addr.sin_family = AF_INET;
-    inet_aton(given_source_addr.c_str(), &source_addr.sin_addr);
-    source_addr.sin_port = htons(59507);
-    const char *data = last_six.c_str();
-    char udp_packet[20 + 8 + last_six.size()];
+    //const char *data = last_six.c_str();
+    const char *data = "sending a udp packet to the something";
+    char udp_packet[20 + 8 + sizeof(data)];
     struct ip *ip_header = (struct ip*) udp_packet;
     struct udphdr *udp_header = (struct udphdr*) (udp_packet);
     char *message_buffer = (char *) (udp_packet + 20 + 8);
     strcpy(message_buffer, data);
-    ip_header->ip_src = inet_makeaddr(inet_addr(given_source_addr.c_str()), INADDR_ANY);
-    ip_header->ip_dst = inet_makeaddr(inet_addr("130.208.242.120"), INADDR_ANY);
+    struct in_addr src_addr;
+    //src_addr.s_addr = inet_aton(given_source_addr.c_str(), &src_addr);
+    inet_aton(given_source_addr.c_str(), &src_addr);
+    ip_header->ip_src = src_addr;
+    struct in_addr dst_addr;
+    //dst_addr.s_addr = inet_addr("130.208.242.120");
+    inet_aton("130.208.242.120", &dst_addr);
+    ip_header->ip_dst = dst_addr;
     ip_header->ip_ttl = 5;
     udp_header->uh_dport = port;
-    udp_header->uh_sport = source_addr.sin_port;
-    udp_header->uh_sum = checksum;
+    udp_header->uh_sport = 59507;
+    udp_header->uh_sum = htons(checksum);
+
 
     string messages = "";
     messages = send_recv("130.208.242.120", port, udp_packet, destaddr, udp_sock);
@@ -185,22 +189,27 @@ int main(int argc, char *argv[]){
                     checksum += messages[position_check];
                     position_check ++;
                 }
+                char last_six_arr[6];
+                int counter = 0;
                 string last_six;
                 cout << "checksum: "<< checksum<< endl;
                 string before_bytes = " network order)";
                 int position_bytes = messages.find(before_bytes) + before_bytes.size();
                 while (position_bytes < messages.size()){
                     last_six += messages[position_bytes];
+                    last_six[counter] = messages[position_bytes];
+                    counter++;
                     position_bytes ++;
                 }
 
                 //string last_six = messages.substr(messages.size()-6);
 
-                cout << "last 6 bytes: " <<last_six << endl;
+                // cout << "last 6 bytes normal: " <<last_six << endl;
+                // cout << "last 6 bytes stoi: " << atoi(last_six_arr) << endl;
                 cout << "stoi checksum: "<< stoi(checksum, 0, 16) <<endl;
                 cout <<"not stoi checksum, regular: "<< checksum <<endl;
 
-                make_udp_packet(last_six, stoi(checksum, 0, 16), given_source_addr, port, udp_sock, destaddr);
+                make_udp_packet(stoi(checksum, 0, 16), given_source_addr, port, udp_sock, destaddr);
             }
             
         }
