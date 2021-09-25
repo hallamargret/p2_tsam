@@ -65,6 +65,11 @@ string send_recv(const char* IP, int port, char* buffer, struct sockaddr_in dest
     return return_messages;
 }
 
+u_short calculate_checksum(struct udphdr* udpheader, int checksum){
+    return 0;
+
+}
+
 void make_udp_packet(int checksum, string given_source_addr, int port, int udp_sock, struct sockaddr_in destaddr)
 {
     //const char *data = last_six.c_str();
@@ -85,7 +90,7 @@ void make_udp_packet(int checksum, string given_source_addr, int port, int udp_s
     ip_header->ip_ttl = 5;
     udp_header->uh_dport = port;
     udp_header->uh_sport = 59507;
-    udp_header->uh_sum = htons(checksum);
+    udp_header->uh_sum = calculate_checksum(udp_header, checksum);
 
 
     string messages = "";
