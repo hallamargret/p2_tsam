@@ -12,7 +12,6 @@
 #include <sys/types.h>
 #include <set>
 
-
 #include "scanner.h"
 
 using namespace std;
@@ -27,6 +26,14 @@ int open_socket(){
         }
     return udp_sock;
 }
+
+struct pseudo_header{
+        in_addr source_address;
+        in_addr dest_address;
+        int placeholder;
+        int protocol;
+        int tcp_length;
+    };
 
 string send_recv(const char* IP, int port, char* buffer, struct sockaddr_in destaddr, int udp_sock){
     char message_buffer[1400];
@@ -65,32 +72,83 @@ string send_recv(const char* IP, int port, char* buffer, struct sockaddr_in dest
     return return_messages;
 }
 
-u_short calculate_checksum(struct udphdr* udpheader, int checksum){
-    return 0;
+u_short calculate_checksum(unsigned short *udpheader, int checksum_given, u_short len){
+    long checksum;
+    u_short odd_byte;
+    short checksum_short;
+
+    checksum = 0;
+    while(len > 1) {
+        checksum += *udpheader++;
+        len -= 2;
+    }
+    if(len == 1) {
+        odd_byte = 0;
+        *((u_char*) &odd_byte) =*(u_char*)udpheader;
+        checksum += odd_byte;
+    }
+
+    checksum = (checksum >> 16) + (checksum & 0xffff);
+    checksum = checksum + (checksum >> 16);
+    checksum_short = (short)~checksum;
+
+    return checksum_short;
+
 
 }
 
 void make_udp_packet(int checksum, string given_source_addr, int port, int udp_sock, struct sockaddr_in destaddr)
 {
+    char udp_packet[4096];
+    memset(udp_packet, 0, 4096);
     //const char *data = last_six.c_str();
     const char *data = "sending a udp packet to the something";
-    char udp_packet[20 + 8 + sizeof(data)];
+    //char udp_packet[20 + 8 + sizeof(data)];
+    
     struct ip *ip_header = (struct ip*) udp_packet;
-    struct udphdr *udp_header = (struct udphdr*) (udp_packet);
-    char *message_buffer = (char *) (udp_packet + 20 + 8);
+    struct udphdr *udp_header = (struct udphdr*) (udp_packet + sizeof(struct ip));
+    struct pseudo_header psh;       // pseudo header for checksum calculations later for the udp header
+
+    char *message_buffer = (char *) (udp_packet + sizeof(struct ip) + sizeof(struct udphdr));
     strcpy(message_buffer, data);
+
     struct in_addr src_addr;
     //src_addr.s_addr = inet_aton(given_source_addr.c_str(), &src_addr);
     inet_aton(given_source_addr.c_str(), &src_addr);
     ip_header->ip_src = src_addr;
+
     struct in_addr dst_addr;
     //dst_addr.s_addr = inet_addr("130.208.242.120");
     inet_aton("130.208.242.120", &dst_addr);
     ip_header->ip_dst = dst_addr;
+    
     ip_header->ip_ttl = 5;
-    udp_header->uh_dport = port;
-    udp_header->uh_sport = 59507;
-    udp_header->uh_sum = calculate_checksum(udp_header, checksum);
+    ip_header->ip_len = sizeof(struct ip) + sizeof(struct udphdr) + strlen(data);
+    ip_header->ip_sum = calculate_checksum((unsigned short*) udp_packet, checksum, ip_header->ip_len);
+    //udp_header->uh_sum =  kalla a calculate_checsum med psucdo header;
+
+    udp_header->uh_dport = htons(port);    //dest port
+    udp_header->uh_sport = htons(59507);   // source port
+    udp_header->uh_sum = 0;     // leave checksum as 0 now, will fill later by pseudo header
+
+    //tcp checksum
+    // pseudo header
+    psh.source_address = src_addr;
+    psh.dest_address = dst_addr;
+    psh.placeholder = checksum;
+    psh.protocol = 17;
+    psh.tcp_length = htons(sizeof(struct udphdr) + strlen(data));
+
+    int psize = sizeof(struct pseudo_header) + sizeof(struct udphdr) + strlen(data);
+    char *pseudo_data = (char *) malloc(psize);
+    memcpy(pseudo_data , (char*) &psh, sizeof(struct pseudo_header));
+    memcpy(pseudo_data + sizeof(struct pseudo_header), udp_header, sizeof(struct udphdr) + strlen(data));
+
+    udp_header->uh_sum = calculate_checksum((unsigned short*) pseudo_data, checksum, psize);
+
+    cout << "udp_header. uh_sum: " << udp_header->uh_sum << endl;
+    cout << "checksum: " << checksum << endl;
+
 
 
     string messages = "";
@@ -116,7 +174,6 @@ void make_udp_packet(int checksum, string given_source_addr, int port, int udp_s
     //             }
     //         }
     //     }
-    
 
 }
 
@@ -213,7 +270,9 @@ int main(int argc, char *argv[]){
                 // cout << "last 6 bytes stoi: " << atoi(last_six_arr) << endl;
                 cout << "stoi checksum: "<< stoi(checksum, 0, 16) <<endl;
                 cout <<"not stoi checksum, regular: "<< checksum <<endl;
-
+                
+                //break just for now 
+                //break;
                 make_udp_packet(stoi(checksum, 0, 16), given_source_addr, port, udp_sock, destaddr);
             }
             
