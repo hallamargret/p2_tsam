@@ -102,7 +102,7 @@ void make_udp_packet(int checksum, string given_source_addr, int port, int udp_s
     char udp_packet[4096];
     memset(udp_packet, 0, 4096);
     //const char *data = last_six.c_str();
-    const char *data = "sending a udp packet to the something";
+    const char *data = "0";
     //char udp_packet[20 + 8 + sizeof(data)];
     
     struct ip *ip_header = (struct ip*) udp_packet;
@@ -121,7 +121,7 @@ void make_udp_packet(int checksum, string given_source_addr, int port, int udp_s
     //dst_addr.s_addr = inet_addr("130.208.242.120");
     inet_aton("130.208.242.120", &dst_addr);
     ip_header->ip_dst = dst_addr;
-    
+
     ip_header->ip_ttl = 5;
     ip_header->ip_len = sizeof(struct ip) + sizeof(struct udphdr) + strlen(data);
     ip_header->ip_sum = calculate_checksum((unsigned short*) udp_packet, checksum, ip_header->ip_len);
