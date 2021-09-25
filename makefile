@@ -1,5 +1,5 @@
 default: compile
 
 compile:
-	g++ -std=c++11 *.cpp -o puzzlesolver
+	g++ -Wall -std=c++11 *.cpp -o puzzlesolver
 

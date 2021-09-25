@@ -28,11 +28,11 @@ int open_socket(){
 }
 
 struct pseudo_header{
-        in_addr source_address;
-        in_addr dest_address;
-        int placeholder;
-        int protocol;
-        int tcp_length;
+        u_int32_t source_address;
+        u_int32_t dest_address;
+        u_int8_t placeholder;
+        u_int8_t protocol;
+        u_int16_t udp_length;
     };
 
 string send_recv(const char* IP, int port, char* buffer, int size_buffer, struct sockaddr_in destaddr, int udp_sock){
@@ -72,7 +72,7 @@ string send_recv(const char* IP, int port, char* buffer, int size_buffer, struct
     return return_messages;
 }
 
-u_short calculate_checksum(unsigned short *udpheader, u_short checksum_given, u_short len){
+u_short calculate_checksum(unsigned short *udpheader, u_short len){
     long checksum;
     u_short odd_byte;
     short checksum_short;
@@ -93,8 +93,6 @@ u_short calculate_checksum(unsigned short *udpheader, u_short checksum_given, u_
     checksum_short = (short)~checksum;
 
     return checksum_short;
-
-
 }
 
 void make_udp_packet(u_short checksum, string given_source_addr, int port, int udp_sock, struct sockaddr_in destaddr)
@@ -102,7 +100,7 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
     char udp_packet[4096];
     memset(udp_packet, 0, 4096);
     //const char *data = last_six.c_str();
-    const char *data = "0";
+    unsigned short data;
     //char udp_packet[20 + 8 + sizeof(data)];
     
     struct ip *ip_header = (struct ip*) udp_packet;
@@ -110,48 +108,57 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
     struct pseudo_header psh;       // pseudo header for checksum calculations later for the udp header
 
     char *message_buffer = (char *) (udp_packet + sizeof(struct ip) + sizeof(struct udphdr));
-    strcpy(message_buffer, data);
 
     struct in_addr src_addr;
-    //src_addr.s_addr = inet_aton(given_source_addr.c_str(), &src_addr);
     inet_aton(given_source_addr.c_str(), &src_addr);
     ip_header->ip_src = src_addr;
 
     struct in_addr dst_addr;
-    //dst_addr.s_addr = inet_addr("130.208.242.120");
     inet_aton("130.208.242.120", &dst_addr);
     ip_header->ip_dst = dst_addr;
 
-    ip_header->ip_ttl = 5;
-    ip_header->ip_len = htons(sizeof(struct ip) + sizeof(struct udphdr) + strlen(data));
-    ip_header->ip_sum = calculate_checksum((unsigned short*) udp_packet, checksum, ip_header->ip_len);
+    ip_header->ip_ttl = 255;
+    ip_header->ip_len = htons(sizeof(struct ip) + sizeof(struct udphdr) + 2);
+    ip_header->ip_hl = 5;
+    ip_header->ip_p = IPPROTO_UDP;
+    ip_header->ip_tos = 0;
+    ip_header->ip_off = 0;
+    ip_header->ip_id = 1377;
+    ip_header->ip_v = 4;
     //udp_header->uh_sum =  kalla a calculate_checsum med psucdo header;
 
     udp_header->uh_dport = htons(port);    //dest port
     udp_header->uh_sport = htons(59507);   // source port
-    udp_header->uh_sum = 0;     // leave checksum as 0 now, will fill later by pseudo header
-    udp_header->uh_ulen = htons(sizeof(struct udphdr) + strlen(data));
+    udp_header->uh_sum = htons(checksum);     // leave checksum as 0 now, will fill later by pseudo header
+    udp_header->uh_ulen = htons(sizeof(struct udphdr) + 2);
 
     //tcp checksum
     // pseudo header
-    psh.source_address = src_addr;
-    psh.dest_address = dst_addr;
-    psh.placeholder = checksum;
-    psh.protocol = 17;
-    psh.tcp_length = htons(sizeof(struct udphdr) + strlen(data));
+    psh.source_address = inet_addr(given_source_addr.c_str());
+    psh.dest_address = inet_addr("130.208.242.120");
+    psh.placeholder = 0;
+    psh.protocol = IPPROTO_UDP;
+    psh.udp_length = htons(sizeof(struct udphdr) + 2);
+    //psh.tcp_length = htons(sizeof(struct udphdr) + strlen(data));
 
-    int psize = sizeof(struct pseudo_header) + sizeof(struct udphdr) + strlen(data);
+    int psize = sizeof(struct pseudo_header) + sizeof(struct udphdr) + 2;
     char *pseudo_data = (char *) malloc(psize);
     memcpy(pseudo_data , (char*) &psh, sizeof(struct pseudo_header));
-    memcpy(pseudo_data + sizeof(struct pseudo_header), udp_header, sizeof(struct udphdr) + strlen(data));
+    memcpy(pseudo_data + sizeof(struct pseudo_header), udp_header, sizeof(struct udphdr));
+    //memcpy(pseudo_data + sizeof(struct pseudo_header) + sizeof(struct udphdr), data, 2);
 
-    udp_header->uh_sum = calculate_checksum((unsigned short*) pseudo_data, checksum, psize);
+    data = calculate_checksum((unsigned short*) pseudo_data, psize);
+
+    memcpy(message_buffer, &data, 2);
+
+    ip_header->ip_sum = htons(calculate_checksum((unsigned short*) udp_packet, ip_header->ip_len));
 
     cout << "udp_header. uh_sum: " << udp_header->uh_sum << endl;
     cout << "checksum: " << checksum << endl;
-    cout << "flipped checksum: " << ~ (unsigned short)checksum << endl;
+    cout << "flipped checksum: " << (unsigned short)(~checksum) << endl;
+    cout << "Difference: " << udp_header->uh_sum - (unsigned short)(~checksum) << endl;
 
-    int length = sizeof(struct ip) + sizeof(struct udphdr) + strlen(data);
+    int length = sizeof(struct ip) + sizeof(struct udphdr) + 2;
 
     string messages = "";
     messages = send_recv("130.208.242.120", port, udp_packet, length, destaddr, udp_sock);
