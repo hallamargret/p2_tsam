@@ -139,13 +139,12 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
     psh.placeholder = 0;
     psh.protocol = IPPROTO_UDP;
     psh.udp_length = htons(sizeof(struct udphdr) + 2);
-    //psh.tcp_length = htons(sizeof(struct udphdr) + strlen(data));
 
     int psize = sizeof(struct pseudo_header) + sizeof(struct udphdr) + 2;
     char *pseudo_data = (char *) malloc(psize);
     memcpy(pseudo_data , (char*) &psh, sizeof(struct pseudo_header));
     memcpy(pseudo_data + sizeof(struct pseudo_header), udp_header, sizeof(struct udphdr));
-    //memcpy(pseudo_data + sizeof(struct pseudo_header) + sizeof(struct udphdr), data, 2);
+    memcpy(pseudo_data + sizeof(struct pseudo_header) + sizeof(struct udphdr), &data, 2);
 
     data = calculate_checksum((unsigned short*) pseudo_data, psize);
 
@@ -153,37 +152,34 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
 
     ip_header->ip_sum = htons(calculate_checksum((unsigned short*) udp_packet, ip_header->ip_len));
 
-    cout << "udp_header. uh_sum: " << udp_header->uh_sum << endl;
-    cout << "checksum: " << checksum << endl;
-    cout << "flipped checksum: " << (unsigned short)(~checksum) << endl;
-    cout << "Difference: " << udp_header->uh_sum - (unsigned short)(~checksum) << endl;
-
     int length = sizeof(struct ip) + sizeof(struct udphdr) + 2;
 
+    int counter = 0;
+    string secret_phrase;
     string messages = "";
+    string msg_begin = "Congratulations group_37!";
     messages = send_recv("130.208.242.120", port, udp_packet, length, destaddr, udp_sock);
-    while (messages == ""){
+    while (true){
+        if (messages.size() >= msg_begin.size()){
+            bool same = true;
+            for (int i = 0; i < msg_begin.size(); i++){
+                if (messages[i] != msg_begin[i]){
+                    same = false;
+                }
+            }
+            if (same){
+                string before_phrase = "\"";
+                int position_phrase = messages.find(before_phrase) + 1;
+                while (messages[position_phrase] != '\"'){
+                    secret_phrase += messages[position_phrase];
+                    position_phrase ++;
+                }
+                break;
+            }
+        }
         messages = send_recv("130.208.242.120", port, udp_packet, length, destaddr, udp_sock);
     }
-    cout << "Answer: " << messages << endl;
-
-    // if (sendto(udp_sock, udp_packet, (20 + 8 + sizeof(data)), 0, (const struct sockaddr *)&destaddr, sizeof(destaddr)) < 0){
-    //         perror("Failed to send");
-    //     }
-    //     else {
-    //         int t = select(udp_sock + 1, &masterfds, NULL, NULL, &timeout);
-    //         if (t > 0){ // if t is 0, timeout accured
-    //             int destaddr_size = sizeof(destaddr);
-    //             if(recvfrom(udp_sock, message_buffer, sizeof(message_buffer), 0, (sockaddr *)&destaddr, (socklen_t *)&destaddr_size) < 0){
-    //                 perror("Failed to recieve");
-    //             }
-    //             else { // if ok, print buffer messages
-    //                 return_messages = message_buffer;
-    //                 return return_messages;
-    //             }
-    //         }
-    //     }
-
+    cout << secret_phrase << endl;
 }
 
 
