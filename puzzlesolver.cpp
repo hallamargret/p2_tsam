@@ -127,7 +127,7 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
     ip_header->ip_v = 4;
 
     udp_header->uh_dport = htons(port);    //dest port
-    udp_header->uh_sport = htons(59507);   // source port
+    udp_header->uh_sport = htons(58585);   // source port
     udp_header->uh_sum = htons(checksum);     // leave checksum as 0 now, will fill later by pseudo header
     udp_header->uh_ulen = htons(sizeof(struct udphdr) + 2);
 
@@ -153,7 +153,6 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
 
     int length = sizeof(struct ip) + sizeof(struct udphdr) + 2;
 
-    int counter = 0;
     string secret_phrase;
     string messages = "";
     string msg_begin = "Congratulations group_37!";
@@ -179,9 +178,101 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
         messages = send_recv("130.208.242.120", port, udp_packet, length, destaddr, udp_sock);
     }
     cout << "Secret Phrase: " << secret_phrase << endl;
+
+}
+
+// Here we find and return the local address.
+struct in_addr local_address() {
+    char buffer[1024];
+    memset(buffer, 0, sizeof(buffer));
+
+    int the_socket = socket(AF_INET, SOCK_DGRAM, 0);
+
+    const char *google_dns_ip = "8.8.8.8";
+    int dns_port = 53;
+
+    struct sockaddr_in server;
+
+    memset(&server, 0, sizeof(server));
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = inet_addr(google_dns_ip);
+    server.sin_port = htons(dns_port);
+
+    connect(the_socket, (const struct sockaddr *)&server, sizeof(server));
+
+    struct sockaddr_in local_addr;
+    socklen_t addr_len = sizeof(local_addr);
+    getsockname(the_socket, (struct sockaddr *)&local_addr, &addr_len);
+
+    close(the_socket);
+    return local_addr.sin_addr;
 }
 
 
+void evil_bit(int port, const char* IP){
+    int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (raw_sock < 0) {
+        perror("Unable to connect socket");
+        exit(-1);
+    }
+
+    int IPHDR_OPT = 1;
+    if (setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &IPHDR_OPT, sizeof(IPHDR_OPT)) < 0){
+        perror("Setsockopt error.");
+        exit(-1);
+    }
+
+    char evil_packet[128];
+    strcpy(evil_packet, "$group_37$");
+    char *packet = (char *) malloc(sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_packet));
+    struct ip *ip_header = (struct ip*) packet;
+    struct udphdr *udp_header = (struct udphdr*) (packet + sizeof(struct ip));
+    char *message_buffer = (char*) (packet + sizeof(struct ip) + sizeof(struct udphdr));
+
+    struct in_addr local_addr = local_address();
+    char src_address[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(local_addr), src_address, INET_ADDRSTRLEN);
+
+    int length_buffer = sizeof(struct ip) + sizeof(struct udphdr) + 2;
+
+    ip_header->ip_ttl = 255;        //time to live
+    ip_header->ip_len = htons(sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_packet));     //total length
+    ip_header->ip_hl = 5;       // ip header length
+    ip_header->ip_p = IPPROTO_UDP;      // protocol
+    ip_header->ip_tos = 0;      // Type of service
+    ip_header->ip_off = htons(0x8000);      // Fragment offset. Evil bit.
+    ip_header->ip_id = 1377;    // id
+    ip_header->ip_v = 4;        // ip version
+    ip_header->ip_sum = 0;      // checksum
+    ip_header->ip_src = local_addr;     // Source addr:
+    //ip_header->ip_src = inet_addr(src_address);                                             // Source addr: 10.3.16.180
+    //ip_header->ip_dst = inet_addr(ip_address);                                              // Dest addr: 130.208.242.120 (ip_address)
+    struct in_addr dst_addr;
+    inet_aton("130.208.242.120", &dst_addr);
+    ip_header->ip_dst = dst_addr;       // Dest addr: 130.208.242.120
+
+
+    //udp header
+    udp_header->uh_sport = htons(58585);        // Source port, we desice some port number.
+    udp_header->uh_dport = htons(port);         // Destination port; EVIL PORT.
+    udp_header->uh_ulen = htons(sizeof(struct udphdr) + strlen(evil_packet));       // Length of udp header.
+    udp_header->uh_sum = 0;     // Checksum
+    strcpy(message_buffer, evil_packet);
+
+    int recv_sock = open_socket();
+    struct sockaddr_in recv_addr;
+    recv_addr.sin_family = AF_INET;
+    inet_aton(IP, &recv_addr.sin_addr);
+    recv_addr.sin_port = htons(58585);
+
+    if(bind(recv_sock, (const sockaddr*) &recv_addr, (u_int) sizeof(recv_addr)) < 0){
+        perror("Failed to bind receive socket.");
+    }
+    send_recv(IP, port, message_buffer, length_buffer, recv_addr,recv_sock);
+    
+
+
+}
 
 
 int main(int argc, char *argv[]){
@@ -233,12 +324,12 @@ int main(int argc, char *argv[]){
         string groupstr_begin = "Hello, group_37!";
         string the_oracle = "I am the oracle,";
         string boss_port = "My boss told me ";
-        string evil_bit = "The dark side of";
+        string evil_begin = "The dark side of";
         bool hello_group_37 = true;
         bool oracle = true;
         bool evil = true;
         bool boss = true;
-        for (int i = 0; i <16; i++){
+        for (int i = 0; i < 16; i++){
             
             if (messages[i] != groupstr_begin[i]){
                 hello_group_37 = false;
@@ -249,7 +340,7 @@ int main(int argc, char *argv[]){
             if (messages[i] != boss_port[i]){
                 boss = false;
             }
-            if (messages[i] != evil_bit[i]){
+            if (messages[i] != evil_begin[i]){
                 evil = false;
             }
 
@@ -257,6 +348,7 @@ int main(int argc, char *argv[]){
         
         if (oracle){
             // send a comma-seperated list of the hidden ports.
+            // check if we have all the hidden ports before sending the list
         }
         if (boss){
             string hidden_port = messages.substr((messages.size()-5));
@@ -264,6 +356,11 @@ int main(int argc, char *argv[]){
             int boss_hidden_port = stoi(hidden_port);
             cout << boss_hidden_port << endl;
         }
+        // evil bit
+        if (evil){
+            evil_bit(port, IP);
+        }
+
         // Hello group 37 messages - Solve checksum puzzle
         if (hello_group_37){
             string given_source_addr = "";
