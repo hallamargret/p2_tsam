@@ -295,11 +295,17 @@ int evil_bit(int port, const char* IP){
     //memset(&recv_message_buffer, 0, sizeof(recv_message_buffer));
     string return_messages;
     char* secret_port_evil;
-
+    cout << "before sendto" << endl;
+    cout << "the raw sock: "<< raw_sock << endl;
     for(int i = 0; i < 5; i++){
         if (sendto(raw_sock, packet, (sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data)), 0, (const struct sockaddr *)&dst_addr, sizeof(dst_addr)) < 0) {
             perror("Failed to send");
         }
+        //just cheching if connect fixes it, otherwise, take it out
+        if(connect(raw_sock, (struct sockaddr *) &dst_addr, sizeof(dst_addr)) < 0){
+        perror("Could not connect");
+    }
+        cout << "after sendto" << endl;
 
         // The select() function indicates which of the specified file descriptors is ready for reading, 
         // ready for writing, or has an error condition pending.
