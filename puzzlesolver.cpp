@@ -125,7 +125,6 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
     ip_header->ip_off = 0;
     ip_header->ip_id = 1377;
     ip_header->ip_v = 4;
-    //udp_header->uh_sum =  kalla a calculate_checsum med psucdo header;
 
     udp_header->uh_dport = htons(port);    //dest port
     udp_header->uh_sport = htons(59507);   // source port
@@ -144,7 +143,7 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
     char *pseudo_data = (char *) malloc(psize);
     memcpy(pseudo_data , (char*) &psh, sizeof(struct pseudo_header));
     memcpy(pseudo_data + sizeof(struct pseudo_header), udp_header, sizeof(struct udphdr));
-    memcpy(pseudo_data + sizeof(struct pseudo_header) + sizeof(struct udphdr), &data, 2);
+    memcpy(pseudo_data + sizeof(struct pseudo_header) + sizeof(struct udphdr), message_buffer, 2);
 
     data = calculate_checksum((unsigned short*) pseudo_data, psize);
 
