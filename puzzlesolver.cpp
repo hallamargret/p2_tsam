@@ -16,6 +16,8 @@
 
 using namespace std;
 
+set <int> secret_ports;
+
 int open_socket(){
     int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -215,7 +217,7 @@ struct in_addr local_address() {
 }
 
 
-void evil_bit(int port, const char* IP){
+int evil_bit(int port, const char* IP){
     int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if (raw_sock < 0) {
         perror("Unable to connect socket");
@@ -228,9 +230,9 @@ void evil_bit(int port, const char* IP){
         exit(-1);
     }
 
-    char evil_packet[128];
-    strcpy(evil_packet, "$group_37$");
-    char *packet = (char *) malloc(sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_packet));
+    char evil_data[128];
+    strcpy(evil_data, "$group_37$");
+    char *packet = (char *) malloc(sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data));
     struct ip *ip_header = (struct ip*) packet;
     struct udphdr *udp_header = (struct udphdr*) (packet + sizeof(struct ip));
     char *message_buffer = (char*) (packet + sizeof(struct ip) + sizeof(struct udphdr));
@@ -239,10 +241,10 @@ void evil_bit(int port, const char* IP){
     char src_address[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(local_addr), src_address, INET_ADDRSTRLEN);
 
-    int length_buffer = sizeof(struct ip) + sizeof(struct udphdr) + 2;
+    //int length_buffer = sizeof(struct ip) + sizeof(struct udphdr) + 2;
 
     ip_header->ip_ttl = 255;        //time to live
-    ip_header->ip_len = htons(sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_packet));     //total length
+    ip_header->ip_len = htons(sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data));     //total length
     ip_header->ip_hl = 5;       // ip header length
     ip_header->ip_p = IPPROTO_UDP;      // protocol
     ip_header->ip_tos = 0;      // Type of service
@@ -250,52 +252,59 @@ void evil_bit(int port, const char* IP){
     ip_header->ip_id = 1377;    // id
     ip_header->ip_v = 4;        // ip version
     ip_header->ip_sum = 0;      // checksum
-    ip_header->ip_src = local_addr;     // Source addr:
+    ip_header->ip_src = local_addr;//inet_addr(src_address);     // Source addr: inet_addr(src_address)
     //ip_header->ip_src = inet_addr(src_address);                                             // Source addr: 10.3.16.180
     //ip_header->ip_dst = inet_addr(ip_address);                                              // Dest addr: 130.208.242.120 (ip_address)
     struct in_addr dst_addr;
-    inet_aton("130.208.242.120", &dst_addr);
+    inet_aton(IP, &dst_addr);
     ip_header->ip_dst = dst_addr;       // Dest addr: 130.208.242.120
 
+    cout << "local addr: " << local_addr.s_addr << endl;
+    cout << "source addr: " << src_address << endl;
+    cout << dst_addr.s_addr << endl;
 
     //udp header
-    udp_header->uh_sport = htons(58585);        // Source port, we desice some port number.
-    udp_header->uh_dport = htons(port);         // Destination port; EVIL PORT.
-    udp_header->uh_ulen = htons(sizeof(struct udphdr) + strlen(evil_packet));       // Length of udp header.
+    udp_header->uh_sport = htons(30000);        // Source port, we desice some port number.
+    udp_header->uh_dport = htons(port);         // Destination port;
+    udp_header->uh_ulen = htons(sizeof(struct udphdr) + strlen(evil_data));       // Length of udp header.
     udp_header->uh_sum = 0;     // Checksum
-    strcpy(message_buffer, evil_packet);
+    strcpy(message_buffer, evil_data);
 
     int recv_sock = open_socket();
     struct sockaddr_in recv_addr;
-    recv_addr.sin_family = AF_INET;
     inet_aton(src_address, &recv_addr.sin_addr);
-    recv_addr.sin_port = htons(58585);
+    recv_addr.sin_family = AF_INET;
+    recv_addr.sin_port = htons(30000);
 
 
-    if(bind(recv_sock, (const sockaddr*) &recv_addr, sizeof(recv_addr)) < 0){
+    if(bind(recv_sock, (const sockaddr*) &recv_addr, (socklen_t) sizeof(recv_addr)) < 0){
         perror("Failed to bind receive socket.");
     }
 
     fd_set masterfds;
     FD_SET(recv_sock, &masterfds);
     struct timeval timeout;             // Timeout for recvfrom()
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;            // Set timeout to 1 second
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 1000000;            // Set timeout to 1 second
 
-    char recv_message_buffer[1400];
-    memset(&recv_message_buffer, 0, sizeof(recv_message_buffer));
+    int addr_len = sizeof(recv_addr);
+
+    int res_length = 1400;
+    char *recv_message_buffer = new char[res_length];
+
+    //memset(&recv_message_buffer, 0, sizeof(recv_message_buffer));
     string return_messages;
     char* secret_port_evil;
 
     for(int i = 0; i < 5; i++){
-        if (sendto(raw_sock, &evil_packet, length_buffer, 0, (const struct sockaddr *)&dst_addr, sizeof(dst_addr)) < 0) {
+        if (sendto(raw_sock, packet, (sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data)), 0, (const struct sockaddr *)&dst_addr, sizeof(dst_addr)) < 0) {
             perror("Failed to send");
         }
 
         // The select() function indicates which of the specified file descriptors is ready for reading, 
         // ready for writing, or has an error condition pending.
         if (select(recv_sock + 1, &masterfds, NULL, NULL, &timeout) > 0) {
-            int response = recvfrom(recv_sock, recv_message_buffer, sizeof(recv_message_buffer), 0, (sockaddr *)&recv_addr, (socklen_t *) sizeof(recv_addr));
+            int response = recvfrom(recv_sock, recv_message_buffer, res_length, 0, (sockaddr *)&recv_addr, (socklen_t *) &addr_len);
             if (response < 0) {
                 perror("Error receiving from server");
             }
@@ -309,20 +318,12 @@ void evil_bit(int port, const char* IP){
                     close_socket(recv_sock);
                     cout << "Messages: " << recv_message_buffer << endl;
                     cout << "Secret Port " << secret_port_evil << endl;
+                    return stoi(secret_port_evil);
                 }
             }
-        }  
+        }
     }
-
-    // int counter = 1;
-    // string messages;
-    // messages = send_recv(IP, port, message_buffer, length_buffer, recv_addr ,recv_sock);
-    // for (int i = 0; i < 5; i++){
-    //     cout << "Messages " << counter++ << ": " << messages << endl;
-    //     messages = send_recv(IP, port, message_buffer, length_buffer, recv_addr ,recv_sock);
-    // }
-    
-
+    return -1;
 
 }
 
@@ -348,6 +349,7 @@ int main(int argc, char *argv[]){
         //call scanner to get the open ports that are not hidden
         Scanner port_scanner = Scanner(IP, 4000, 4100);
         udp_sock = port_scanner.open_socket();
+
         destaddr.sin_family = AF_INET;
         inet_aton(IP, &destaddr.sin_addr);
         int destaddr_size = sizeof(destaddr);
@@ -377,10 +379,12 @@ int main(int argc, char *argv[]){
         string the_oracle = "I am the oracle,";
         string boss_port = "My boss told me ";
         string evil_begin = "The dark side of";
+
         bool hello_group_37 = true;
         bool oracle = true;
         bool evil = true;
         bool boss = true;
+
         for (int i = 0; i < 16; i++){
             
             if (messages[i] != groupstr_begin[i]){
@@ -406,6 +410,7 @@ int main(int argc, char *argv[]){
             string hidden_port = messages.substr((messages.size()-5));
             cout << "substring: " << hidden_port << endl;
             int boss_hidden_port = stoi(hidden_port);
+            secret_ports.insert(boss_hidden_port);
             cout << boss_hidden_port << endl;
         }
         // evil bit
