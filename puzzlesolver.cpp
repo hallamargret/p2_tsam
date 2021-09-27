@@ -231,12 +231,38 @@ int main(int argc, char *argv[]){
         }
         cout << port << ": " << messages << endl;
         string groupstr_begin = "Hello, group_37!";
+        string the_oracle = "I am the oracle,";
+        string boss_port = "My boss told me ";
+        string evil_bit = "The dark side of";
         bool hello_group_37 = true;
+        bool oracle = true;
+        bool evil = true;
+        bool boss = true;
         for (int i = 0; i <16; i++){
             
             if (messages[i] != groupstr_begin[i]){
                 hello_group_37 = false;
             }
+            if (messages[i] != the_oracle[i]){
+                oracle = false;
+            }
+            if (messages[i] != boss_port[i]){
+                boss = false;
+            }
+            if (messages[i] != evil_bit[i]){
+                evil = false;
+            }
+
+        }
+        
+        if (oracle){
+            // send a comma-seperated list of the hidden ports.
+        }
+        if (boss){
+            string hidden_port = messages.substr((messages.size()-5));
+            cout << "substring: " << hidden_port << endl;
+            int boss_hidden_port = stoi(hidden_port);
+            cout << boss_hidden_port << endl;
         }
         // Hello group 37 messages - Solve checksum puzzle
         if (hello_group_37){
