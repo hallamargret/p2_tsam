@@ -179,7 +179,7 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
         }
         messages = send_recv("130.208.242.120", port, udp_packet, length, destaddr, udp_sock);
     }
-    cout << secret_phrase << endl;
+    cout << "Secret Phrase: " << secret_phrase << endl;
 }
 
 
@@ -232,14 +232,15 @@ int main(int argc, char *argv[]){
         }
         cout << port << ": " << messages << endl;
         string groupstr_begin = "Hello, group_37!";
-        bool same = true;
+        bool hello_group_37 = true;
         for (int i = 0; i <16; i++){
             
             if (messages[i] != groupstr_begin[i]){
-                same = false;
+                hello_group_37 = false;
             }
         }
-        if (same){
+        // Hello group 37 messages - Solve checksum puzzle
+        if (hello_group_37){
             string given_source_addr = "";
             string before_source_addr = "source address being ";
             int position = messages.find(before_source_addr) + before_source_addr.size();
@@ -256,25 +257,6 @@ int main(int argc, char *argv[]){
                 checksum += messages[position_check];
                 position_check ++;
             }
-            char last_six_arr[6];
-            int counter = 0;
-            string last_six;
-            cout << "checksum: "<< checksum<< endl;
-            string before_bytes = " network order)";
-            int position_bytes = messages.find(before_bytes) + before_bytes.size();
-            while (position_bytes < messages.size()){
-                last_six += messages[position_bytes];
-                last_six[counter] = messages[position_bytes];
-                counter++;
-                position_bytes ++;
-            }
-
-            //string last_six = messages.substr(messages.size()-6);
-
-            // cout << "last 6 bytes normal: " <<last_six << endl;
-            // cout << "last 6 bytes stoi: " << atoi(last_six_arr) << endl;
-            cout << "stoi checksum: "<< stoul(checksum, 0, 16) <<endl;
-            cout <<"not stoi checksum, regular: "<< checksum <<endl;
             
             u_short checksum_short = (unsigned short) (stoul(checksum, 0, 16));
             make_udp_packet(checksum_short, given_source_addr, port, udp_sock, destaddr);
