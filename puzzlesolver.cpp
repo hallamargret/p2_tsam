@@ -27,6 +27,12 @@ int open_socket(){
     return udp_sock;
 }
 
+// Closes the socket
+void close_socket(int sock){
+    shutdown(sock, SHUT_RDWR);
+    close(sock);
+}
+
 struct pseudo_header{
         u_int32_t source_address;
         u_int32_t dest_address;
@@ -44,8 +50,8 @@ string send_recv(const char* IP, int port, char* buffer, int size_buffer, struct
         fd_set masterfds;
         FD_SET(udp_sock, &masterfds);
         struct timeval timeout;             // Timeout for recvfrom()
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 40000;            // Set timeout to 0.2 seconds
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;            // Set timeout to 1 second
         
 
         destaddr.sin_family = AF_INET;
@@ -262,13 +268,59 @@ void evil_bit(int port, const char* IP){
     int recv_sock = open_socket();
     struct sockaddr_in recv_addr;
     recv_addr.sin_family = AF_INET;
-    inet_aton(IP, &recv_addr.sin_addr);
+    inet_aton(src_address, &recv_addr.sin_addr);
     recv_addr.sin_port = htons(58585);
 
-    if(bind(recv_sock, (const sockaddr*) &recv_addr, (u_int) sizeof(recv_addr)) < 0){
+
+    if(bind(recv_sock, (const sockaddr*) &recv_addr, sizeof(recv_addr)) < 0){
         perror("Failed to bind receive socket.");
     }
-    send_recv(IP, port, message_buffer, length_buffer, recv_addr,recv_sock);
+
+    fd_set masterfds;
+    FD_SET(recv_sock, &masterfds);
+    struct timeval timeout;             // Timeout for recvfrom()
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;            // Set timeout to 1 second
+
+    char recv_message_buffer[1400];
+    memset(&recv_message_buffer, 0, sizeof(recv_message_buffer));
+    string return_messages;
+    char* secret_port_evil;
+
+    for(int i = 0; i < 5; i++){
+        if (sendto(raw_sock, &evil_packet, length_buffer, 0, (const struct sockaddr *)&dst_addr, sizeof(dst_addr)) < 0) {
+            perror("Failed to send");
+        }
+
+        // The select() function indicates which of the specified file descriptors is ready for reading, 
+        // ready for writing, or has an error condition pending.
+        if (select(recv_sock + 1, &masterfds, NULL, NULL, &timeout) > 0) {
+            int response = recvfrom(recv_sock, recv_message_buffer, sizeof(recv_message_buffer), 0, (sockaddr *)&recv_addr, (socklen_t *) sizeof(recv_addr));
+            if (response < 0) {
+                perror("Error receiving from server");
+            }
+            else {
+                char src_address[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &(recv_addr.sin_addr), src_address, INET_ADDRSTRLEN); // Find src_address to compare to ip address.
+                if ((strcmp(IP, src_address) == 0) && ntohs(recv_addr.sin_port) == port){
+                    recv_message_buffer[response] = '\0';
+                    secret_port_evil = recv_message_buffer + response - 4; // To get the last four letters from the response - The secret port
+                    close_socket(raw_sock);
+                    close_socket(recv_sock);
+                    cout << "Messages: " << recv_message_buffer << endl;
+                    cout << "Secret Port " << secret_port_evil << endl;
+                }
+            }
+        }  
+    }
+
+    // int counter = 1;
+    // string messages;
+    // messages = send_recv(IP, port, message_buffer, length_buffer, recv_addr ,recv_sock);
+    // for (int i = 0; i < 5; i++){
+    //     cout << "Messages " << counter++ << ": " << messages << endl;
+    //     messages = send_recv(IP, port, message_buffer, length_buffer, recv_addr ,recv_sock);
+    // }
     
 
 
