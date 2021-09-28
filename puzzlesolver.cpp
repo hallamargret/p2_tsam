@@ -56,12 +56,13 @@ void close_socket(int sock){
     close(sock);
 }
 
+// Sends the udp socket to the given ip address and recieve the message after the sock is sent
 string send_recv(const char* IP, int port, char* buffer, int size_buffer, int udp_sock){
     struct sockaddr_in destaddr;
     char message_buffer[1400];
     memset(&message_buffer, 0, sizeof(message_buffer));
     string return_messages;
-    //int udp_sock = open_socket();
+
     if(udp_sock > 0){
         fd_set masterfds;
         FD_SET(udp_sock, &masterfds);
@@ -240,24 +241,25 @@ struct in_addr local_address() {
 }
 
 int evil_bit(const char* IP, struct in_addr dest_addr){
-    //int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    int raw_sock = socket(PF_INET, SOCK_RAW, IPPROTO_TCP);
+    // making a raw socket
+    int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if (raw_sock < 0) {
         perror("Unable to connect socket");
         exit(-1);
     }
-
     int IPHDR_OPT = 1;
     if (setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &IPHDR_OPT, sizeof(IPHDR_OPT)) < 0){
         perror("Setsockopt error.");
         exit(-1);
     }
 
-
+    char packet[4096];
+    memset(packet, 0, 4096);
 
     char evil_data[128];
     strcpy(evil_data, "$group_37$");
-    char *packet = (char *) malloc(sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data));
+    
+    //char *packet = (char *) malloc(sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data));
     struct ip *ip_header = (struct ip*) packet;
     struct udphdr *udp_header = (struct udphdr*) (packet + sizeof(struct ip));
     char *message_buffer = (char*) (packet + sizeof(struct ip) + sizeof(struct udphdr));
@@ -266,29 +268,24 @@ int evil_bit(const char* IP, struct in_addr dest_addr){
     char src_address[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(local_addr), src_address, INET_ADDRSTRLEN);
 
-    //int length_buffer = sizeof(struct ip) + sizeof(struct udphdr) + 2;
 
     ip_header->ip_ttl = 255;        //time to live
     ip_header->ip_len = sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data);     //total length
-    ip_header->ip_hl = 5;       // ip header length
+    ip_header->ip_hl = 5;               // ip header length
     ip_header->ip_p = IPPROTO_UDP;      // protocol
-    ip_header->ip_tos = 0;      // Type of service
-    ip_header->ip_off = htons(0x8000);      // Fragment offset. Evil bit!!
-    ip_header->ip_id = 5678;    // id
-    ip_header->ip_v = 4;        // ip version
-    ip_header->ip_sum = 0;      // checksum
-    ip_header->ip_src = local_addr;//inet_addr(src_address);     // Source addr: inet_addr(src_address)
-    //ip_header->ip_src = inet_addr(src_address);                                             // Source addr: 10.3.16.180
-    //ip_header->ip_dst = inet_addr(ip_address);                                              // Dest addr: 130.208.242.120 (ip_address)
-    // struct in_addr dst_addr;
-    // inet_aton(IP, &dst_addr);
+    ip_header->ip_tos = 0;              // Type of service
+    ip_header->ip_off = htons(0x8000);  // Fragment offset. Evil bit!!
+    ip_header->ip_id = 5678;            // id
+    ip_header->ip_v = 4;                // ip version
+    ip_header->ip_sum = 0;              // checksum
+    ip_header->ip_src = local_addr;      // source address is our local address
     ip_header->ip_dst = dest_addr;       // Dest addr: 130.208.242.120
 
 
     //udp header
-    udp_header->uh_sport = htons(30000);        // Source port, we desice some port number.
+    udp_header->uh_sport = htons(30000);             // Source port, we desice some port number.
     udp_header->uh_dport = htons(EVIL_PORT);         // Destination port;
-    udp_header->uh_ulen = htons(sizeof(struct udphdr) + strlen(evil_data));       // Length of udp header.
+    udp_header->uh_ulen = htons(sizeof(struct udphdr) + strlen(evil_data));       // The length of the udp header.
     udp_header->uh_sum = 0;     // Checksum
     strcpy(message_buffer, evil_data);
 
@@ -317,20 +314,19 @@ int evil_bit(const char* IP, struct in_addr dest_addr){
     //memset(&recv_message_buffer, 0, sizeof(recv_message_buffer));
     string return_messages;
     char* secret_port_evil;
-    cout << "before sendto" << endl;
-    cout << "the raw sock: "<< raw_sock << endl;
+    
     for(int i = 0; i < 5; i++){
-        if (sendto(raw_sock, packet, (sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data)), 0, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
+        // we cant send, the socket is not connected 
+        if (sendto(raw_sock, &packet, (sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data)), 0, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
             perror("Failed to send");
         }
-        //just cheching if connect fixes it, otherwise, take it out
+        //just cheching if we can connect 
         if(connect(raw_sock, (struct sockaddr *) &dest_addr, sizeof(dest_addr)) < 0){
         perror("Could not connect");
     }
-        cout << "after sendto" << endl;
 
-        // The select() function indicates which of the specified file descriptors is ready for reading, 
-        // ready for writing, or has an error condition pending.
+
+        // select() indicates which of the specified file descriptors is ready for reading, ready for writing, or has an error condition pending.
         if (select(recv_sock + 1, &masterfds, NULL, NULL, &timeout) > 0) {
             int response = recvfrom(recv_sock, recv_message_buffer, res_length, 0, (sockaddr *)&recv_addr, (socklen_t *) &addr_len);
             if (response < 0) {
@@ -457,9 +453,9 @@ queue<string> get_info_for_oracle(set<int> open_ports, const char *IP, int udp_s
     messages = send_recv(IP, ports[EVIL_PORT], send_buffer, strlen(send_buffer), udp_sock);
     while (true){
         if (strstr(messages.c_str(), evil_begin.c_str())){
-            secret_ports.insert(4014); // Because we could not finnish evil_bit
-            cout << "calling evil bit" << endl;
-            evil_bit(IP, destaddr);
+            secret_ports.insert(4014); // Because we could not finnish evil_bit, the socket would not connect, otherwise evil_bit finished
+            //uncomment the below line to call evil_bit
+            //evil_bit(IP, destaddr);
             break;
         }
         messages = send_recv(IP, ports[EVIL_PORT], send_buffer, strlen(send_buffer), udp_sock);
