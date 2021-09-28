@@ -45,11 +45,11 @@ because of the make file that is in this folder, both the programs will compile.
 If you prefer to compile the programs by yourself, then you can compile the scanner program by typing this command:
 
 ```
-g++ -std=c++11 scanner.cpp -o ./scanner
+g++ -std=c++11 scanner.cpp scannerClass.cpp -o ./scanner
 ```
 Compile the puzzlesolver program by typing this command:
 ```
-g++ -std=c++11 puzzlesolver.cpp -o ./puzzlesolver
+g++ -std=c++11 puzzlesolver.cpp scannerClass.cpp -o ./puzzlesolver
 ```
 Or both at the same time by typing this command:
 ```

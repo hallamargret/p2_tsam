@@ -18,12 +18,9 @@ Scanner::Scanner(const char *IP_addr, int port_from, int port_to){
     this->IP_addr = IP_addr;
     this->port_from = port_from;
     this->port_to = port_to;
-
-
 }
 
-Scanner::~Scanner()
-{
+Scanner::~Scanner(){
 }
 
 // creating a socket, returns the socked if successfully opened socket, if not returns -1 
@@ -43,19 +40,13 @@ int Scanner::open_socket(){
 
 set<int> Scanner::the_scanner(){
 
-    //pass the ports 4000-4100 on the command line       // The socket
-    // char buffer[1400];  // Buffer for information to send
-    // int length;
-    // struct sockaddr_in destaddr;
-    // vector<int> open_ports;
+    //pass the ports 4000-4100 on the command line  
 
     strcpy(buffer, "$group_37$"); // Message set to buffer
     length = strlen(buffer) + 1; // lenght of buffer
 
 
     if (open_socket() > 0){
-        //destaddr.sin_family = AF_INET;
-        //inet_aton(this->IP_addr, &destaddr.sin_addr);
 
         // Scans each port from port_from to port_to
         for (int port = this->port_from; port <= this->port_to; port++){
@@ -81,9 +72,7 @@ set<int> Scanner::the_scanner(){
                         if(recvfrom(udp_sock, buffer, length, 0, (sockaddr *)&destaddr, (socklen_t *)&destaddr_size) < 0){
                             perror("Failed to recieve");
                         }
-                        else { // if ok, print port
-                            //cout << port << endl; // The port is open, print the port and break to check the next port
-                            //cout << buffer << endl;
+                        else { // if ok, add port to open ports set
                             if (string(IP_addr) == "130.208.242.120"){
                                 int open_port = ntohs(destaddr.sin_port);
                                 open_ports.insert(open_port);
