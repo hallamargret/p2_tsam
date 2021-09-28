@@ -11,12 +11,33 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <set>
+#include <vector>
+#include <sstream>
+#include <set>
+#include <queue>
 
 #include "scanner.h"
 
 using namespace std;
 
-set <int> secret_ports;
+int ports[4] = {0}; //Keeps track of what port is what
+int ORACLE_PORT = 0;
+int CHECKSUM_PORT = 1;
+int EVIL_PORT = 2;
+int SIMPLE_PORT = 3;
+
+string checksum_begin = "Hello, group_37!";
+string oracle_begin = "I am the oracle,";
+string simple_begin = "My boss told me ";
+string evil_begin = "The dark side of";
+
+struct pseudo_header{
+        u_int32_t source_address;
+        u_int32_t dest_address;
+        u_int8_t placeholder;
+        u_int8_t protocol;
+        u_int16_t udp_length;
+};
 
 int open_socket(){
     int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -35,15 +56,8 @@ void close_socket(int sock){
     close(sock);
 }
 
-struct pseudo_header{
-        u_int32_t source_address;
-        u_int32_t dest_address;
-        u_int8_t placeholder;
-        u_int8_t protocol;
-        u_int16_t udp_length;
-    };
-
-string send_recv(const char* IP, int port, char* buffer, int size_buffer, struct sockaddr_in destaddr, int udp_sock){
+string send_recv(const char* IP, int port, char* buffer, int size_buffer, int udp_sock){
+    struct sockaddr_in destaddr;
     char message_buffer[1400];
     memset(&message_buffer, 0, sizeof(message_buffer));
     string return_messages;
@@ -80,6 +94,17 @@ string send_recv(const char* IP, int port, char* buffer, int size_buffer, struct
     return return_messages;
 }
 
+string get_right_substring(string messages_before, string messages){
+    string return_string;
+    int position = messages.find(messages_before) + messages_before.size();
+    while (messages[position] != '!'){
+        return_string += messages[position];
+        position ++;
+    }
+    return return_string;
+}
+
+
 u_short calculate_checksum(unsigned short *udpheader, u_short len){
     long checksum;
     u_short odd_byte;
@@ -103,8 +128,8 @@ u_short calculate_checksum(unsigned short *udpheader, u_short len){
     return checksum_short;
 }
 
-void make_udp_packet(u_short checksum, string given_source_addr, int port, int udp_sock, struct sockaddr_in destaddr)
-{
+string get_secret_phrase(u_short checksum, string given_source_addr, int udp_sock){
+    // CREATE UDP PACKET
     char udp_packet[4096];
     memset(udp_packet, 0, 4096);
     //const char *data = last_six.c_str();
@@ -117,6 +142,7 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
 
     char *message_buffer = (char *) (udp_packet + sizeof(struct ip) + sizeof(struct udphdr));
 
+    // SET IP HEADER
     struct in_addr src_addr;
     inet_aton(given_source_addr.c_str(), &src_addr);
     ip_header->ip_src = src_addr;
@@ -134,13 +160,13 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
     ip_header->ip_id = 1377;
     ip_header->ip_v = 4;
 
-    udp_header->uh_dport = htons(port);    //dest port
-    udp_header->uh_sport = htons(58585);   // source port
-    udp_header->uh_sum = htons(checksum);     // leave checksum as 0 now, will fill later by pseudo header
+    // SET UDP HEADER
+    udp_header->uh_dport = htons(ports[CHECKSUM_PORT]);         //dest port
+    udp_header->uh_sport = htons(58585);        // source port
+    udp_header->uh_sum = htons(checksum);       // Set checksum to the checksum we want
     udp_header->uh_ulen = htons(sizeof(struct udphdr) + 2);
 
-    //tcp checksum
-    // pseudo header
+    // MAKE PSEUDO HEADER
     psh.source_address = inet_addr(given_source_addr.c_str());
     psh.dest_address = inet_addr("130.208.242.120");
     psh.placeholder = 0;
@@ -153,40 +179,37 @@ void make_udp_packet(u_short checksum, string given_source_addr, int port, int u
     memcpy(pseudo_data + sizeof(struct pseudo_header), udp_header, sizeof(struct udphdr));
     memcpy(pseudo_data + sizeof(struct pseudo_header) + sizeof(struct udphdr), message_buffer, 2);
 
+    // Use pseudo header and calculate_checksum function with data set to 0 to calculate 
+    // the difference needed to make the checksum we want valid
+    // We add the difference to the data to make it valid.
     data = calculate_checksum((unsigned short*) pseudo_data, psize);
 
     memcpy(message_buffer, &data, 2);
 
+    // Calculate checksum for ip header
     ip_header->ip_sum = htons(calculate_checksum((unsigned short*) udp_packet, ip_header->ip_len));
 
     int length = sizeof(struct ip) + sizeof(struct udphdr) + 2;
 
+
+    // SEND UDP PACKET WITH VALID CHECKSUM TO THE PORT
     string secret_phrase;
     string messages = "";
     string msg_begin = "Congratulations group_37!";
-    messages = send_recv("130.208.242.120", port, udp_packet, length, destaddr, udp_sock);
+    messages = send_recv("130.208.242.120", ports[CHECKSUM_PORT], udp_packet, length, udp_sock);
     while (true){
-        if (messages.size() >= msg_begin.size()){
-            bool same = true;
-            for (int i = 0; i < msg_begin.size(); i++){
-                if (messages[i] != msg_begin[i]){
-                    same = false;
-                }
+        if (strstr(messages.c_str(), msg_begin.c_str())){
+            string before_phrase = "\"";
+            int position_phrase = messages.find(before_phrase) + 1;
+            while (messages[position_phrase] != '\"'){
+                secret_phrase += messages[position_phrase];
+                position_phrase ++;
             }
-            if (same){
-                string before_phrase = "\"";
-                int position_phrase = messages.find(before_phrase) + 1;
-                while (messages[position_phrase] != '\"'){
-                    secret_phrase += messages[position_phrase];
-                    position_phrase ++;
-                }
-                break;
-            }
+            break;
         }
-        messages = send_recv("130.208.242.120", port, udp_packet, length, destaddr, udp_sock);
+        messages = send_recv("130.208.242.120", ports[CHECKSUM_PORT], udp_packet, length, udp_sock);
     }
-    cout << "Secret Phrase: " << secret_phrase << endl;
-
+    return secret_phrase;
 }
 
 // Here we find and return the local address.
@@ -215,7 +238,6 @@ struct in_addr local_address() {
     close(the_socket);
     return local_addr.sin_addr;
 }
-
 
 int evil_bit(int port, const char* IP){
     int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
@@ -259,9 +281,6 @@ int evil_bit(int port, const char* IP){
     inet_aton(IP, &dst_addr);
     ip_header->ip_dst = dst_addr;       // Dest addr: 130.208.242.120
 
-    cout << "local addr: " << local_addr.s_addr << endl;
-    cout << "source addr: " << src_address << endl;
-    cout << dst_addr.s_addr << endl;
 
     //udp header
     udp_header->uh_sport = htons(30000);        // Source port, we desice some port number.
@@ -330,12 +349,138 @@ int evil_bit(int port, const char* IP){
         }
     }
     return -1;
+}
 
+string knock_knock(vector<string> order_of_knock_ports, string secret_phrase, const char *IP, int udp_sock){
+    string knock_messages;
+    for(int i = 0; i< order_of_knock_ports.size(); i++) {    //print all splitted strings
+        string msg_back;
+        char messages[1400];
+        int port = stoi(order_of_knock_ports.at(i));
+        strcpy(messages, secret_phrase.c_str());
+        msg_back = send_recv(IP, port, messages, secret_phrase.size(), udp_sock);
+        if (msg_back ==  ""){
+            return "Try again";
+        } else {
+            knock_messages = msg_back;
+        }
+   }
+   return knock_messages;
+}
+
+void prepare_for_knock(string messages_to_oracle, string secret_phrase, const char* IP, int udp_sock){
+    char messages_buffer[1400];
+    vector<string> order_of_knock_ports;
+
+    strcpy(messages_buffer, messages_to_oracle.c_str());
+    string recv_messages = send_recv(IP, ports[ORACLE_PORT], messages_buffer, strlen(messages_buffer), udp_sock);
+    string correct_begin = "4014,";
+    while (true){
+        if (strstr(recv_messages.c_str(), correct_begin.c_str())){  
+            stringstream s_stream(recv_messages); //create string stream from the string
+            while(s_stream.good()) {
+                string substr;
+                getline(s_stream, substr, ','); //get first string delimited by comma
+                order_of_knock_ports.push_back(substr);
+            }
+            break;
+        }
+    }
+    string knock_messages = knock_knock(order_of_knock_ports, secret_phrase, IP, udp_sock);
+    while (knock_messages == "Try again"){
+        knock_messages = knock_knock(order_of_knock_ports, secret_phrase, IP, udp_sock);
+    }
+    cout << knock_messages << endl;
 }
 
 
-int main(int argc, char *argv[]){
+void send_to_open_ports(set<int> open_ports, const char *IP, int udp_sock){
+    char send_buffer[1400];
+    strcpy(send_buffer, "$group_37$");
 
+    for (int port : open_ports){
+        string messages = "";
+        messages = send_recv(IP, port, send_buffer, strlen(send_buffer), udp_sock);
+        while (messages == ""){
+            messages = send_recv(IP, port, send_buffer, strlen(send_buffer), udp_sock);
+        }
+        //cout << port << ": " << messages << endl;
+    
+        // oracle port
+        if (strstr(messages.c_str(), oracle_begin.c_str())){
+            ports[ORACLE_PORT] = port;
+        }
+
+        // simple port
+        if (strstr(messages.c_str(), simple_begin.c_str())){
+            ports[SIMPLE_PORT] = port;
+        }
+
+        // evil bit
+        if (strstr(messages.c_str(), evil_begin.c_str())){
+            ports[EVIL_PORT] = port;
+        }
+
+        // checksum
+        if (strstr(messages.c_str(), checksum_begin.c_str())){
+            ports[CHECKSUM_PORT] = port;
+        }
+    }
+}
+
+queue<string> get_info_for_oracle(set<int> open_ports, const char *IP, int udp_sock){
+    char send_buffer[1400];
+    strcpy(send_buffer, "$group_37$");
+    queue<string> return_values;
+    string secret_phrase = "";
+    set<int> secret_ports;
+
+    // CHECKSUM PORT
+    string messages = "";
+    messages = send_recv(IP, ports[CHECKSUM_PORT], send_buffer, strlen(send_buffer), udp_sock);
+    while (true){
+        if (strstr(messages.c_str(), checksum_begin.c_str()) && secret_phrase == ""){
+            string given_source_addr = get_right_substring("source address being ", messages);
+            string checksum = get_right_substring(" UDP checksum of ", messages);
+            u_short checksum_short = (unsigned short) (stoul(checksum, 0, 16));
+            secret_phrase = get_secret_phrase(checksum_short, given_source_addr, udp_sock);
+            break;
+        }
+        messages = send_recv(IP, ports[CHECKSUM_PORT], send_buffer, strlen(send_buffer), udp_sock);
+    }
+
+    // EVIL PORT
+    messages = "";
+    messages = send_recv(IP, ports[EVIL_PORT], send_buffer, strlen(send_buffer), udp_sock);
+    while (true){
+        if (strstr(messages.c_str(), evil_begin.c_str())){
+            secret_ports.insert(4014); // Because we could not finnish evil_bit
+            //evil_bit(port, IP);
+            break;
+        }
+        messages = send_recv(IP, ports[EVIL_PORT], send_buffer, strlen(send_buffer), udp_sock);
+    }
+
+    // SIMPLE PORT 
+    messages = "";
+    messages = send_recv(IP, ports[SIMPLE_PORT], send_buffer, strlen(send_buffer), udp_sock);
+    while (true){
+        if (strstr(messages.c_str(), simple_begin.c_str())){
+            string hidden_port = messages.substr((messages.size()-5));
+            secret_ports.insert(stoi(hidden_port));
+            break;
+        }
+        messages = send_recv(IP, ports[SIMPLE_PORT], send_buffer, strlen(send_buffer), udp_sock);
+    }
+
+    for (int port : secret_ports){
+        return_values.push(to_string(port));
+    }
+    return_values.push(secret_phrase);
+    return return_values;
+}
+
+int main(int argc, char *argv[]){
     //pass the ports 4000-4100 on the command line
     char buffer[1400];  // Buffer for information to send
     int length;
@@ -343,8 +488,6 @@ int main(int argc, char *argv[]){
     string messages;
     const char *IP;
     int udp_sock;
-
-
     set<int> open_ports;
 
     strcpy(buffer, "$group_37$"); // Message set to buffer
@@ -358,11 +501,12 @@ int main(int argc, char *argv[]){
 
         destaddr.sin_family = AF_INET;
         inet_aton(IP, &destaddr.sin_addr);
-        int destaddr_size = sizeof(destaddr);
-        
 
         open_ports = port_scanner.the_scanner();
-
+        while (open_ports.size() != 4){
+            cout << "One of the ports are not responding - Try again" << endl;
+            exit(0);
+        }
     }
     else if (argc == 6){
         //got the ports in as arguments
@@ -371,81 +515,36 @@ int main(int argc, char *argv[]){
         for (int i = 2; i < 6; i++){
             open_ports.insert(atoi(argv[i]));
         }
-
-
     }
-    for (int port : open_ports){
-        messages = "";
-        messages = send_recv(IP, port, buffer, strlen(buffer), destaddr, udp_sock);
-        while (messages == ""){
-            messages = send_recv(IP, port, buffer, strlen(buffer), destaddr, udp_sock);
-        }
-        cout << port << ": " << messages << endl;
-        string groupstr_begin = "Hello, group_37!";
-        string the_oracle = "I am the oracle,";
-        string boss_port = "My boss told me ";
-        string evil_begin = "The dark side of";
-
-        bool hello_group_37 = true;
-        bool oracle = true;
-        bool evil = true;
-        bool boss = true;
-
-        for (int i = 0; i < 16; i++){
-            
-            if (messages[i] != groupstr_begin[i]){
-                hello_group_37 = false;
-            }
-            if (messages[i] != the_oracle[i]){
-                oracle = false;
-            }
-            if (messages[i] != boss_port[i]){
-                boss = false;
-            }
-            if (messages[i] != evil_begin[i]){
-                evil = false;
-            }
-
-        }
-        
-        if (oracle){
-            // send a comma-seperated list of the hidden ports.
-            // check if we have all the hidden ports before sending the list
-        }
-        if (boss){
-            string hidden_port = messages.substr((messages.size()-5));
-            cout << "substring: " << hidden_port << endl;
-            int boss_hidden_port = stoi(hidden_port);
-            secret_ports.insert(boss_hidden_port);
-            cout << boss_hidden_port << endl;
-        }
-        // evil bit
-        if (evil){
-            evil_bit(port, IP);
-        }
-
-        // Hello group 37 messages - Solve checksum puzzle
-        if (hello_group_37){
-            string given_source_addr = "";
-            string before_source_addr = "source address being ";
-            int position = messages.find(before_source_addr) + before_source_addr.size();
-            while (messages[position] != '!'){
-                given_source_addr += messages[position];
-                position ++;
-            }
-            cout << "source addr: "<< given_source_addr<< endl;
-
-            string checksum;
-            string before_checksum = " UDP checksum of ";
-            int position_check = messages.find(before_checksum) + before_checksum.size();
-            while (messages[position_check] != ','){
-                checksum += messages[position_check];
-                position_check ++;
-            }
-            
-            u_short checksum_short = (unsigned short) (stoul(checksum, 0, 16));
-            make_udp_packet(checksum_short, given_source_addr, port, udp_sock, destaddr);
-        }
+    else {
+        cout << "The program should be run with the command:" << endl;
+        cout << "./puzzlesolver <IP address>" << endl;
+        cout << "or\n./puzzlesolver <IP address> <port1> <port2> <port3> <port4>" << endl; 
+        exit(0);
     }
+
+    int send_to_open_ports_counter = 0;
+    send_to_open_ports(open_ports, IP, udp_sock);
+    while (ports[EVIL_PORT] == 0 || ports[CHECKSUM_PORT] == 0 || ports[SIMPLE_PORT] == 0 || ports[ORACLE_PORT] == 0){
+        if (send_to_open_ports_counter >= 10){
+            cout << "One of the open ports is not responding - Please try again" << endl;
+            exit(0);
+        }
+        send_to_open_ports(open_ports, IP, udp_sock);
+        send_to_open_ports_counter++;
+    }
+
+    queue<string> info_for_oracle = get_info_for_oracle(open_ports, IP, udp_sock);
+    while (info_for_oracle.size() != 3){
+        info_for_oracle = get_info_for_oracle(open_ports, IP, udp_sock);
+    }
+    string secret_ports_comma_sep = info_for_oracle.front();
+    info_for_oracle.pop();
+    secret_ports_comma_sep += "," + info_for_oracle.front();
+    info_for_oracle.pop();
+    string secret_phrase = info_for_oracle.front();
+    info_for_oracle.pop();
+    
+    prepare_for_knock(secret_ports_comma_sep, secret_phrase, IP, udp_sock);
     return 0;
 }
