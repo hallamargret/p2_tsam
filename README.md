@@ -51,11 +51,7 @@ Compile the puzzlesolver program by typing this command:
 ```
 g++ -std=c++11 puzzlesolver.cpp scannerClass.cpp -o ./puzzlesolver
 ```
-Or both at the same time by typing this command:
-```
-g++ -std=c++11 *.cpp -o ./puzzlesolver
-```
-The last one is the command used in the makefile
+Both of the commands are in the makefile.
 ## Run the programs
 
 ### Part 1
