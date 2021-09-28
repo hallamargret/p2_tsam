@@ -16,7 +16,7 @@
 #include <set>
 #include <queue>
 
-#include "scanner.h"
+#include "scannerClass.h"
 
 using namespace std;
 
@@ -239,8 +239,9 @@ struct in_addr local_address() {
     return local_addr.sin_addr;
 }
 
-int evil_bit(int port, const char* IP){
-    int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+int evil_bit(const char* IP, struct in_addr dest_addr){
+    //int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    int raw_sock = socket(PF_INET, SOCK_RAW, IPPROTO_TCP);
     if (raw_sock < 0) {
         perror("Unable to connect socket");
         exit(-1);
@@ -251,6 +252,8 @@ int evil_bit(int port, const char* IP){
         perror("Setsockopt error.");
         exit(-1);
     }
+
+
 
     char evil_data[128];
     strcpy(evil_data, "$group_37$");
@@ -266,25 +269,25 @@ int evil_bit(int port, const char* IP){
     //int length_buffer = sizeof(struct ip) + sizeof(struct udphdr) + 2;
 
     ip_header->ip_ttl = 255;        //time to live
-    ip_header->ip_len = htons(sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data));     //total length
+    ip_header->ip_len = sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data);     //total length
     ip_header->ip_hl = 5;       // ip header length
     ip_header->ip_p = IPPROTO_UDP;      // protocol
     ip_header->ip_tos = 0;      // Type of service
-    ip_header->ip_off = htons(0x8000);      // Fragment offset. Evil bit.
-    ip_header->ip_id = 1377;    // id
+    ip_header->ip_off = htons(0x8000);      // Fragment offset. Evil bit!!
+    ip_header->ip_id = 5678;    // id
     ip_header->ip_v = 4;        // ip version
     ip_header->ip_sum = 0;      // checksum
     ip_header->ip_src = local_addr;//inet_addr(src_address);     // Source addr: inet_addr(src_address)
     //ip_header->ip_src = inet_addr(src_address);                                             // Source addr: 10.3.16.180
     //ip_header->ip_dst = inet_addr(ip_address);                                              // Dest addr: 130.208.242.120 (ip_address)
-    struct in_addr dst_addr;
-    inet_aton(IP, &dst_addr);
-    ip_header->ip_dst = dst_addr;       // Dest addr: 130.208.242.120
+    // struct in_addr dst_addr;
+    // inet_aton(IP, &dst_addr);
+    ip_header->ip_dst = dest_addr;       // Dest addr: 130.208.242.120
 
 
     //udp header
     udp_header->uh_sport = htons(30000);        // Source port, we desice some port number.
-    udp_header->uh_dport = htons(port);         // Destination port;
+    udp_header->uh_dport = htons(EVIL_PORT);         // Destination port;
     udp_header->uh_ulen = htons(sizeof(struct udphdr) + strlen(evil_data));       // Length of udp header.
     udp_header->uh_sum = 0;     // Checksum
     strcpy(message_buffer, evil_data);
@@ -303,8 +306,8 @@ int evil_bit(int port, const char* IP){
     fd_set masterfds;
     FD_SET(recv_sock, &masterfds);
     struct timeval timeout;             // Timeout for recvfrom()
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 1000000;            // Set timeout to 1 second
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;            // Set timeout to 1 second
 
     int addr_len = sizeof(recv_addr);
 
@@ -317,11 +320,11 @@ int evil_bit(int port, const char* IP){
     cout << "before sendto" << endl;
     cout << "the raw sock: "<< raw_sock << endl;
     for(int i = 0; i < 5; i++){
-        if (sendto(raw_sock, packet, (sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data)), 0, (const struct sockaddr *)&dst_addr, sizeof(dst_addr)) < 0) {
+        if (sendto(raw_sock, packet, (sizeof(struct ip) + sizeof(struct udphdr) + strlen(evil_data)), 0, (const struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0) {
             perror("Failed to send");
         }
         //just cheching if connect fixes it, otherwise, take it out
-        if(connect(raw_sock, (struct sockaddr *) &dst_addr, sizeof(dst_addr)) < 0){
+        if(connect(raw_sock, (struct sockaddr *) &dest_addr, sizeof(dest_addr)) < 0){
         perror("Could not connect");
     }
         cout << "after sendto" << endl;
@@ -335,8 +338,8 @@ int evil_bit(int port, const char* IP){
             }
             else {
                 char src_address[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &(recv_addr.sin_addr), src_address, INET_ADDRSTRLEN); // Find src_address to compare to ip address.
-                if ((strcmp(IP, src_address) == 0) && ntohs(recv_addr.sin_port) == port){
+                inet_ntop(AF_INET, &(recv_addr.sin_addr), src_address, INET_ADDRSTRLEN); // Find the source address to compare to the ip address.
+                if ((strcmp(IP, src_address) == 0) && ntohs(recv_addr.sin_port) == EVIL_PORT){
                     recv_message_buffer[response] = '\0';
                     secret_port_evil = recv_message_buffer + response - 4; // To get the last four letters from the response - The secret port
                     close_socket(raw_sock);
@@ -428,7 +431,7 @@ void send_to_open_ports(set<int> open_ports, const char *IP, int udp_sock){
     }
 }
 
-queue<string> get_info_for_oracle(set<int> open_ports, const char *IP, int udp_sock){
+queue<string> get_info_for_oracle(set<int> open_ports, const char *IP, int udp_sock, struct in_addr destaddr){
     char send_buffer[1400];
     strcpy(send_buffer, "$group_37$");
     queue<string> return_values;
@@ -455,7 +458,8 @@ queue<string> get_info_for_oracle(set<int> open_ports, const char *IP, int udp_s
     while (true){
         if (strstr(messages.c_str(), evil_begin.c_str())){
             secret_ports.insert(4014); // Because we could not finnish evil_bit
-            //evil_bit(port, IP);
+            cout << "calling evil bit" << endl;
+            evil_bit(IP, destaddr);
             break;
         }
         messages = send_recv(IP, ports[EVIL_PORT], send_buffer, strlen(send_buffer), udp_sock);
@@ -499,8 +503,8 @@ int main(int argc, char *argv[]){
         Scanner port_scanner = Scanner(IP, 4000, 4100);
         udp_sock = port_scanner.open_socket();
 
-        destaddr.sin_family = AF_INET;
-        inet_aton(IP, &destaddr.sin_addr);
+        // destaddr.sin_family = AF_INET;
+        // inet_aton(IP, &destaddr.sin_addr);
 
         open_ports = port_scanner.the_scanner();
         while (open_ports.size() != 4){
@@ -523,6 +527,9 @@ int main(int argc, char *argv[]){
         exit(0);
     }
 
+    destaddr.sin_family = AF_INET;
+    inet_aton(IP, &destaddr.sin_addr);
+
     int send_to_open_ports_counter = 0;
     send_to_open_ports(open_ports, IP, udp_sock);
     while (ports[EVIL_PORT] == 0 || ports[CHECKSUM_PORT] == 0 || ports[SIMPLE_PORT] == 0 || ports[ORACLE_PORT] == 0){
@@ -534,9 +541,9 @@ int main(int argc, char *argv[]){
         send_to_open_ports_counter++;
     }
 
-    queue<string> info_for_oracle = get_info_for_oracle(open_ports, IP, udp_sock);
+    queue<string> info_for_oracle = get_info_for_oracle(open_ports, IP, udp_sock, destaddr.sin_addr);
     while (info_for_oracle.size() != 3){
-        info_for_oracle = get_info_for_oracle(open_ports, IP, udp_sock);
+        info_for_oracle = get_info_for_oracle(open_ports, IP, udp_sock, destaddr.sin_addr);
     }
     string secret_ports_comma_sep = info_for_oracle.front();
     info_for_oracle.pop();

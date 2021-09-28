@@ -1,4 +1,4 @@
-#include "scanner.h"
+#include "scannerClass.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
