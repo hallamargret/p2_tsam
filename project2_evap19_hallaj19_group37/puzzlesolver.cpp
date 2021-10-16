@@ -373,6 +373,7 @@ void prepare_for_knock(string messages_to_oracle, string secret_phrase, const ch
 
     strcpy(messages_buffer, messages_to_oracle.c_str());
     string recv_messages = send_recv(IP, ports[ORACLE_PORT], messages_buffer, strlen(messages_buffer), udp_sock);
+    cout << recv_messages << endl;
     string correct_begin = "4006,";
     while (true){
         if (strstr(recv_messages.c_str(), correct_begin.c_str())){  
