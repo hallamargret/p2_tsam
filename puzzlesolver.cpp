@@ -373,7 +373,8 @@ void prepare_for_knock(string messages_to_oracle, string secret_phrase, const ch
 
     strcpy(messages_buffer, messages_to_oracle.c_str());
     string recv_messages = send_recv(IP, ports[ORACLE_PORT], messages_buffer, strlen(messages_buffer), udp_sock);
-    string correct_begin = "4014,";
+    cout << recv_messages << endl;
+    string correct_begin = "4006,";
     while (true){
         if (strstr(recv_messages.c_str(), correct_begin.c_str())){  
             stringstream s_stream(recv_messages); //create string stream from the string
@@ -453,7 +454,7 @@ queue<string> get_info_for_oracle(set<int> open_ports, const char *IP, int udp_s
     messages = send_recv(IP, ports[EVIL_PORT], send_buffer, strlen(send_buffer), udp_sock);
     while (true){
         if (strstr(messages.c_str(), evil_begin.c_str())){
-            secret_ports.insert(4014); // Because we could not finnish evil_bit, the socket would not connect, otherwise evil_bit finished
+            secret_ports.insert(4006); // Because we could not finnish evil_bit, the socket would not connect, otherwise evil_bit finished
             //uncomment the below line to call evil_bit
             //evil_bit(IP, destaddr);
             break;
